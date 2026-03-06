@@ -121,6 +121,15 @@ describe("places", () => {
     expect(args.pageSize).toBe(5);
   });
 
+  test("caps radius at 50000m", async () => {
+    const { captured } = mockMcpResponseCapture({ places: [], summary: "" });
+
+    await places(["food", "--near", "0,0", "--radius", "100000"]);
+
+    const args = (captured.body as any).params.arguments;
+    expect(args.locationBias.circle.radiusMeters).toBe(50000);
+  });
+
   test("handles --region flag", async () => {
     const { captured } = mockMcpResponseCapture({ places: [], summary: "" });
 

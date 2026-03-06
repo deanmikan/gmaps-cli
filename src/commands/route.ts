@@ -19,6 +19,10 @@ interface RoutesResponse {
 }
 
 function parseWaypoint(input: string): Waypoint {
+  // Place IDs start with "ChIJ"
+  if (input.startsWith("ChIJ")) {
+    return { placeId: input };
+  }
   const parts = input.split(",");
   if (parts.length === 2) {
     const lat = parseFloat(parts[0]);
@@ -37,6 +41,8 @@ export async function route(argv: string[]) {
 
   if (!origin || !destination || flags.help) {
     console.log(`Usage: gmaps route <origin> <destination> [options]
+
+Origin/destination can be an address, lat,lng coordinates, or a place ID (from gmaps places).
 
 Options:
   --mode <mode>  Travel mode: drive, walk (default: drive)`);

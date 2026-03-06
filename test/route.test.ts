@@ -123,6 +123,16 @@ describe("route", () => {
     await expect(route(["A", "B"])).rejects.toThrow("EXIT:1");
   });
 
+  test("parses place IDs starting with ChIJ", async () => {
+    const { captured } = mockMcpResponseCapture(mockRouteData);
+
+    await route(["ChIJOwE_Id1w5EAR4Q27FkL6T_0", "ChIJt_5xIthw5EARoJ71mGq7t74"]);
+
+    const args = (captured.body as any).params.arguments;
+    expect(args.origin).toEqual({ placeId: "ChIJOwE_Id1w5EAR4Q27FkL6T_0" });
+    expect(args.destination).toEqual({ placeId: "ChIJt_5xIthw5EARoJ71mGq7t74" });
+  });
+
   test("formats small distances in meters", async () => {
     mockMcpResponse({ routes: [{ distanceMeters: 500, duration: "300s" }] });
 

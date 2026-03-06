@@ -24,7 +24,7 @@ export async function places(argv: string[]) {
 
 Options:
   --near <lat,lng>     Bias results to location
-  --radius <meters>    Search radius (requires --near, default: 5000)
+  --radius <meters>    Search radius (requires --near, default: 5000, max: 50000)
   --limit <n>          Max results (default: 10)
   --language <code>    Language code (default: en)
   --region <code>      Region bias (ISO 3166-1)`);
@@ -50,7 +50,7 @@ Options:
     args.locationBias = {
       circle: {
         center: { latitude: lat, longitude: lng },
-        radiusMeters: parseFloat(flags.radius ?? "5000"),
+        radiusMeters: Math.min(parseFloat(flags.radius ?? "5000"), 50000),
       },
     };
   }
