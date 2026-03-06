@@ -1,6 +1,6 @@
 ---
 name: gmaps
-description: "Google Maps: Search for places and compute routes. Use when the user asks about places, directions, travel times, distances, or nearby businesses."
+description: "Google Maps: Search for places and compute routes. Use when the user asks about places, businesses, restaurants, directions, travel times, distances, nearby locations, how to get somewhere, what's near a location, commute times, or anything involving maps and navigation — even if they don't explicitly mention 'maps'."
 metadata:
   openclaw:
     category: "productivity"
@@ -14,6 +14,16 @@ metadata:
 ```bash
 gmaps <command> [options]
 ```
+
+## Authentication
+
+Authentication is handled automatically. The Google Maps API key is pre-configured in the environment.
+
+## Common Workflows
+
+- **Find and navigate:** Use `places` to find a location, then `route` to get directions to it
+- **Compare options:** Search for multiple places, then compute routes to each to find the closest
+- **Nearby search:** Use `places` with `--near` to find things around a known coordinate
 
 ## Commands
 
@@ -64,16 +74,39 @@ gmaps route "Central Park" "Brooklyn Bridge" --mode walk
 | `--waypoints <stops>` | Comma-separated intermediate stops | — |
 | `--units <system>` | `metric` or `imperial` | metric |
 
-## Output
+## Output Format
 
-Both commands output JSON to stdout. Parse with `jq` if needed:
+Both commands output JSON to stdout.
 
-```bash
-# Get just the first place name
-gmaps places "coffee" | jq '.places[0].name'
+### places
 
-# Get route duration
-gmaps route "A" "B" | jq '.route.duration'
+```json
+{
+  "places": [
+    {
+      "name": "Blue Bottle Coffee",
+      "address": "450 W 15th St, New York, NY 10011",
+      "location": { "lat": 40.7423, "lng": -74.006 },
+      "rating": 4.5,
+      "types": ["coffee_shop", "cafe"],
+      "mapsUrl": "https://maps.google.com/?cid=..."
+    }
+  ]
+}
+```
+
+### route
+
+```json
+{
+  "route": {
+    "distance": "15.2 km",
+    "duration": "28 mins",
+    "steps": [
+      { "instruction": "Head north on Van Wyck Expy", "distance": "3.1 km", "duration": "5 mins" }
+    ]
+  }
+}
 ```
 
 ## Key Patterns
@@ -82,3 +115,16 @@ gmaps route "A" "B" | jq '.route.duration'
 - **Get directions:** `gmaps route "origin" "destination"` — returns distance, duration, turn-by-turn steps
 - **Nearby search:** `gmaps places "type" --near "lat,lng"` — find things near a coordinate
 - **Multi-stop route:** `gmaps route "A" "D" --waypoints "B,C"` — route through intermediate stops
+
+## Notes
+
+- If `places` returns an empty array, try broadening the search or removing `--near`
+- If `route` fails, the origin/destination may be too vague — try adding city/country
+
+## Help
+
+```bash
+gmaps --help
+gmaps places --help
+gmaps route --help
+```
