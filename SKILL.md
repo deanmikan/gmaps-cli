@@ -120,7 +120,8 @@ The `summary` field contains the most useful information — it includes place n
 
 - Always include location context in places queries (in the query text or via `--near`)
 - If `places` returns an empty array, try broadening the search or removing `--near`
-- If `route` fails, the origin/destination may be too vague — try adding city/country
+- **Route requires specific addresses** — short names and abbreviations (e.g. "MCG", "CBD") often fail. Use full addresses like "Melbourne Cricket Ground, Melbourne" or, better yet, use `gmaps places` first to get a place ID and pass that to `gmaps route`
+- If `route` returns "No route found", try: (1) use `gmaps places` to find the place ID, then route with that, or (2) use a more specific address with city/country
 - Route only supports `drive` and `walk` modes (no bicycle or transit)
 - Max search radius is 50,000 meters
 
