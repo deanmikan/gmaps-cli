@@ -1,41 +1,20 @@
-import { googleFetch, parseArgs } from "../utils.js";
-
-const ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
-const FIELD_MASK = "routes.legs.steps.navigationInstruction,routes.legs.steps.localizedValues,routes.legs.localizedValues,routes.localizedValues,routes.distanceMeters,routes.duration";
+import { mcpCall, parseArgs, formatDuration, formatDistance } from "../utils.js";
 
 const TRAVEL_MODES: Record<string, string> = {
   drive: "DRIVE",
   walk: "WALK",
-  bicycle: "BICYCLE",
-  transit: "TRANSIT",
 };
 
 interface Waypoint {
   address?: string;
-  location?: { latLng: { latitude: number; longitude: number } };
+  latLng?: { latitude: number; longitude: number };
+  placeId?: string;
 }
 
 interface RoutesResponse {
   routes?: Array<{
     distanceMeters?: number;
     duration?: string;
-    localizedValues?: {
-      distance?: { text: string };
-      duration?: { text: string };
-    };
-    legs?: Array<{
-      localizedValues?: {
-        distance?: { text: string };
-        duration?: { text: string };
-      };
-      steps?: Array<{
-        navigationInstruction?: { instructions: string };
-        localizedValues?: {
-          distance?: { text: string };
-          staticDuration?: { text: string };
-        };
-      }>;
-    }>;
   }>;
 }
 
@@ -45,7 +24,7 @@ function parseWaypoint(input: string): Waypoint {
     const lat = parseFloat(parts[0]);
     const lng = parseFloat(parts[1]);
     if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-      return { location: { latLng: { latitude: lat, longitude: lng } } };
+      return { latLng: { latitude: lat, longitude: lng } };
     }
   }
   return { address: input };
@@ -60,9 +39,7 @@ export async function route(argv: string[]) {
     console.log(`Usage: gmaps route <origin> <destination> [options]
 
 Options:
-  --mode <mode>        Travel mode: drive, walk, bicycle, transit (default: drive)
-  --waypoints <stops>  Comma-separated intermediate stops
-  --units <system>     metric or imperial (default: metric)`);
+  --mode <mode>  Travel mode: drive, walk (default: drive)`);
     process.exit(origin && destination ? 0 : 1);
   }
 
@@ -73,18 +50,13 @@ Options:
     process.exit(1);
   }
 
-  const body: Record<string, unknown> = {
+  const args: Record<string, unknown> = {
     origin: parseWaypoint(origin),
     destination: parseWaypoint(destination),
     travelMode,
-    units: flags.units === "imperial" ? "IMPERIAL" : "METRIC",
   };
 
-  if (flags.waypoints) {
-    body.intermediates = flags.waypoints.split(",").map((s) => parseWaypoint(s.trim()));
-  }
-
-  const data = await googleFetch<RoutesResponse>(ROUTES_URL, body, FIELD_MASK);
+  const data = await mcpCall<RoutesResponse>("compute_routes", args);
   const r = data.routes?.[0];
 
   if (!r) {
@@ -94,15 +66,10 @@ Options:
 
   const result = {
     route: {
-      distance: r.localizedValues?.distance?.text ?? `${r.distanceMeters} m`,
-      duration: r.localizedValues?.duration?.text ?? r.duration ?? "",
-      steps: (r.legs ?? []).flatMap((leg) =>
-        (leg.steps ?? []).map((step) => ({
-          instruction: step.navigationInstruction?.instructions ?? "",
-          distance: step.localizedValues?.distance?.text ?? "",
-          duration: step.localizedValues?.staticDuration?.text ?? "",
-        })),
-      ),
+      distance: r.distanceMeters != null ? formatDistance(r.distanceMeters) : "",
+      duration: r.duration ? formatDuration(r.duration) : "",
+      distanceMeters: r.distanceMeters ?? 0,
+      durationSeconds: parseInt(r.duration ?? "0") || 0,
     },
   };
 

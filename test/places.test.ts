@@ -1,7 +1,5 @@
-import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 
-// We need to test the places command by mocking global.fetch and capturing console.log output.
-// Set API key env before importing.
 process.env.GOOGLE_MAPS_API_KEY = "test-key";
 
 import { places } from "../src/commands/places.js";
@@ -18,7 +16,6 @@ describe("places", () => {
     originalExit = process.exit;
     logs = [];
     console.log = (...args: unknown[]) => { logs.push(args.map(String).join(" ")); };
-    // Mock process.exit to throw instead of actually exiting
     process.exit = ((code?: number) => { throw new Error(`EXIT:${code}`); }) as never;
   });
 
@@ -28,111 +25,113 @@ describe("places", () => {
     process.exit = originalExit;
   });
 
-  test("sends correct request body for basic query", async () => {
-    let capturedUrl = "";
-    let capturedBody: Record<string, unknown> = {};
-    let capturedHeaders: Record<string, string> = {};
+  function mockMcpResponse(result: unknown) {
+    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      return new Response(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    }) as typeof fetch;
+  }
 
-    global.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      capturedUrl = url.toString();
-      capturedBody = JSON.parse(init?.body as string);
-      capturedHeaders = Object.fromEntries(
+  function mockMcpResponseCapture(result: unknown): { captured: { body: Record<string, unknown>; headers: Record<string, string> } } {
+    const captured = { body: {} as Record<string, unknown>, headers: {} as Record<string, string> };
+    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.body = JSON.parse(init?.body as string);
+      captured.headers = Object.fromEntries(
         Object.entries(init?.headers as Record<string, string>)
       );
       return new Response(JSON.stringify({
-        places: [{
-          displayName: { text: "Test Cafe" },
-          formattedAddress: "123 Test St",
-          location: { latitude: -33.8, longitude: 151.2 },
-          rating: 4.5,
-          types: ["cafe"],
-          googleMapsUri: "https://maps.google.com/?cid=123",
-        }]
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
       }));
     }) as typeof fetch;
+    return { captured };
+  }
+
+  test("sends correct JSON-RPC request", async () => {
+    const { captured } = mockMcpResponseCapture({
+      places: [{ id: "abc", location: { latitude: -33.8, longitude: 151.2 } }],
+      summary: "Test summary",
+    });
 
     await places(["coffee shops"]);
 
-    expect(capturedUrl).toBe("https://places.googleapis.com/v1/places:searchText");
-    expect(capturedBody.textQuery).toBe("coffee shops");
-    expect(capturedBody.pageSize).toBe(10);
-    expect(capturedBody.languageCode).toBe("en");
-    expect(capturedHeaders["X-Goog-Api-Key"]).toBe("test-key");
-    expect(capturedHeaders["X-Goog-FieldMask"]).toContain("places.displayName");
+    expect(captured.body).toMatchObject({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "search_places",
+        arguments: {
+          textQuery: "coffee shops",
+          pageSize: 10,
+          languageCode: "en",
+        },
+      },
+    });
+    expect(captured.headers["X-Goog-Api-Key"]).toBe("test-key");
   });
 
   test("formats response correctly", async () => {
-    global.fetch = (async () => {
-      return new Response(JSON.stringify({
-        places: [{
-          displayName: { text: "Blue Bottle" },
-          formattedAddress: "450 W 15th St",
-          location: { latitude: 40.7423, longitude: -74.006 },
-          rating: 4.5,
-          types: ["coffee_shop", "cafe"],
-          googleMapsUri: "https://maps.google.com/?cid=456",
-        }]
-      }));
-    }) as typeof fetch;
+    mockMcpResponse({
+      places: [{
+        id: "ChIJ123",
+        location: { latitude: 40.7423, longitude: -74.006 },
+        googleMapsLinks: {
+          placeUrl: "https://maps.google.com/place/123",
+          directionsUrl: "https://maps.google.com/dir/123",
+        },
+      }],
+      summary: "Found a great coffee shop.",
+    });
 
     await places(["coffee"]);
 
     const output = JSON.parse(logs[0]);
     expect(output.places).toHaveLength(1);
-    expect(output.places[0].name).toBe("Blue Bottle");
-    expect(output.places[0].address).toBe("450 W 15th St");
+    expect(output.places[0].id).toBe("ChIJ123");
     expect(output.places[0].location).toEqual({ lat: 40.7423, lng: -74.006 });
-    expect(output.places[0].rating).toBe(4.5);
-    expect(output.places[0].types).toEqual(["coffee_shop", "cafe"]);
-    expect(output.places[0].mapsUrl).toBe("https://maps.google.com/?cid=456");
+    expect(output.places[0].mapsUrl).toBe("https://maps.google.com/place/123");
+    expect(output.places[0].directionsUrl).toBe("https://maps.google.com/dir/123");
+    expect(output.summary).toBe("Found a great coffee shop.");
   });
 
   test("handles --near and --radius flags", async () => {
-    let capturedBody: Record<string, unknown> = {};
-
-    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string);
-      return new Response(JSON.stringify({ places: [] }));
-    }) as typeof fetch;
+    const { captured } = mockMcpResponseCapture({ places: [], summary: "" });
 
     await places(["petrol", "--near", "-33.8688,151.2093", "--radius", "2000"]);
 
-    expect(capturedBody.locationBias).toEqual({
+    const args = (captured.body as any).params.arguments;
+    expect(args.locationBias).toEqual({
       circle: {
         center: { latitude: -33.8688, longitude: 151.2093 },
-        radius: 2000,
+        radiusMeters: 2000,
       },
     });
   });
 
-  test("handles --limit flag (capped at 20)", async () => {
-    let capturedBody: Record<string, unknown> = {};
+  test("handles --limit flag", async () => {
+    const { captured } = mockMcpResponseCapture({ places: [], summary: "" });
 
-    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string);
-      return new Response(JSON.stringify({ places: [] }));
-    }) as typeof fetch;
+    await places(["food", "--limit", "5"]);
 
-    await places(["food", "--limit", "50"]);
-    expect(capturedBody.pageSize).toBe(20);
+    const args = (captured.body as any).params.arguments;
+    expect(args.pageSize).toBe(5);
   });
 
   test("handles --region flag", async () => {
-    let capturedBody: Record<string, unknown> = {};
-
-    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string);
-      return new Response(JSON.stringify({ places: [] }));
-    }) as typeof fetch;
+    const { captured } = mockMcpResponseCapture({ places: [], summary: "" });
 
     await places(["restaurants", "--region", "AU"]);
-    expect(capturedBody.regionCode).toBe("AU");
+
+    const args = (captured.body as any).params.arguments;
+    expect(args.regionCode).toBe("AU");
   });
 
   test("handles empty places response", async () => {
-    global.fetch = (async () => {
-      return new Response(JSON.stringify({}));
-    }) as typeof fetch;
+    mockMcpResponse({ summary: "No results found." });
 
     await places(["nonexistent"]);
 
@@ -141,22 +140,16 @@ describe("places", () => {
   });
 
   test("handles missing optional fields in place data", async () => {
-    global.fetch = (async () => {
-      return new Response(JSON.stringify({
-        places: [{ id: "abc" }]
-      }));
-    }) as typeof fetch;
+    mockMcpResponse({ places: [{ id: "abc" }] });
 
     await places(["test"]);
 
     const output = JSON.parse(logs[0]);
     expect(output.places[0]).toEqual({
-      name: "",
-      address: "",
+      id: "abc",
       location: null,
-      rating: null,
-      types: [],
       mapsUrl: "",
+      directionsUrl: "",
     });
   });
 

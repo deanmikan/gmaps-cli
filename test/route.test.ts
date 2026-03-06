@@ -25,118 +25,87 @@ describe("route", () => {
     process.exit = originalExit;
   });
 
-  const mockRouteResponse = {
+  const mockRouteData = {
     routes: [{
       distanceMeters: 15200,
       duration: "1680s",
-      localizedValues: {
-        distance: { text: "15.2 km" },
-        duration: { text: "28 mins" },
-      },
-      legs: [{
-        steps: [{
-          navigationInstruction: { instructions: "Head north on Van Wyck Expy" },
-          localizedValues: {
-            distance: { text: "3.1 km" },
-            staticDuration: { text: "5 mins" },
-          },
-        }],
-      }],
     }],
   };
 
-  test("sends correct request body for basic route", async () => {
-    let capturedBody: Record<string, unknown> = {};
-    let capturedHeaders: Record<string, string> = {};
-
-    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string);
-      capturedHeaders = Object.fromEntries(
-        Object.entries(init?.headers as Record<string, string>)
-      );
-      return new Response(JSON.stringify(mockRouteResponse));
+  function mockMcpResponse(result: unknown) {
+    global.fetch = (async () => {
+      return new Response(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
     }) as typeof fetch;
+  }
+
+  function mockMcpResponseCapture(result: unknown): { captured: { body: Record<string, unknown> } } {
+    const captured = { body: {} as Record<string, unknown> };
+    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.body = JSON.parse(init?.body as string);
+      return new Response(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    }) as typeof fetch;
+    return { captured };
+  }
+
+  test("sends correct JSON-RPC request for basic route", async () => {
+    const { captured } = mockMcpResponseCapture(mockRouteData);
 
     await route(["JFK Airport", "Manhattan"]);
 
-    expect(capturedBody.origin).toEqual({ address: "JFK Airport" });
-    expect(capturedBody.destination).toEqual({ address: "Manhattan" });
-    expect(capturedBody.travelMode).toBe("DRIVE");
-    expect(capturedBody.units).toBe("METRIC");
-    expect(capturedHeaders["X-Goog-Api-Key"]).toBe("test-key");
+    expect(captured.body).toMatchObject({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "compute_routes",
+        arguments: {
+          origin: { address: "JFK Airport" },
+          destination: { address: "Manhattan" },
+          travelMode: "DRIVE",
+        },
+      },
+    });
   });
 
   test("formats response correctly", async () => {
-    global.fetch = (async () => {
-      return new Response(JSON.stringify(mockRouteResponse));
-    }) as typeof fetch;
+    mockMcpResponse(mockRouteData);
 
     await route(["A", "B"]);
 
     const output = JSON.parse(logs[0]);
     expect(output.route.distance).toBe("15.2 km");
     expect(output.route.duration).toBe("28 mins");
-    expect(output.route.steps).toHaveLength(1);
-    expect(output.route.steps[0].instruction).toBe("Head north on Van Wyck Expy");
-    expect(output.route.steps[0].distance).toBe("3.1 km");
-    expect(output.route.steps[0].duration).toBe("5 mins");
+    expect(output.route.distanceMeters).toBe(15200);
+    expect(output.route.durationSeconds).toBe(1680);
   });
 
-  test("handles --mode flag", async () => {
-    let capturedBody: Record<string, unknown> = {};
-
-    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string);
-      return new Response(JSON.stringify(mockRouteResponse));
-    }) as typeof fetch;
+  test("handles --mode walk flag", async () => {
+    const { captured } = mockMcpResponseCapture(mockRouteData);
 
     await route(["A", "B", "--mode", "walk"]);
-    expect(capturedBody.travelMode).toBe("WALK");
+
+    const args = (captured.body as any).params.arguments;
+    expect(args.travelMode).toBe("WALK");
   });
 
-  test("handles --units imperial flag", async () => {
-    let capturedBody: Record<string, unknown> = {};
-
-    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string);
-      return new Response(JSON.stringify(mockRouteResponse));
-    }) as typeof fetch;
-
-    await route(["A", "B", "--units", "imperial"]);
-    expect(capturedBody.units).toBe("IMPERIAL");
-  });
-
-  test("handles --waypoints flag", async () => {
-    let capturedBody: Record<string, unknown> = {};
-
-    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string);
-      return new Response(JSON.stringify(mockRouteResponse));
-    }) as typeof fetch;
-
-    await route(["Sydney", "Melbourne", "--waypoints", "Canberra,Albury"]);
-
-    const intermediates = capturedBody.intermediates as Array<{ address?: string }>;
-    expect(intermediates).toHaveLength(2);
-    expect(intermediates[0]).toEqual({ address: "Canberra" });
-    expect(intermediates[1]).toEqual({ address: "Albury" });
-  });
-
-  test("parses coordinate waypoints as lat/lng", async () => {
-    let capturedBody: Record<string, unknown> = {};
-
-    global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string);
-      return new Response(JSON.stringify(mockRouteResponse));
-    }) as typeof fetch;
+  test("parses coordinate origins as lat/lng", async () => {
+    const { captured } = mockMcpResponseCapture(mockRouteData);
 
     await route(["-33.8688,151.2093", "40.7128,-74.0060"]);
 
-    expect(capturedBody.origin).toEqual({
-      location: { latLng: { latitude: -33.8688, longitude: 151.2093 } },
+    const args = (captured.body as any).params.arguments;
+    expect(args.origin).toEqual({
+      latLng: { latitude: -33.8688, longitude: 151.2093 },
     });
-    expect(capturedBody.destination).toEqual({
-      location: { latLng: { latitude: 40.7128, longitude: -74.006 } },
+    expect(args.destination).toEqual({
+      latLng: { latitude: 40.7128, longitude: -74.006 },
     });
   });
 
@@ -145,32 +114,22 @@ describe("route", () => {
   });
 
   test("exits with error for invalid mode", async () => {
-    await expect(route(["A", "B", "--mode", "fly"])).rejects.toThrow("EXIT:1");
+    await expect(route(["A", "B", "--mode", "bicycle"])).rejects.toThrow("EXIT:1");
   });
 
   test("exits with error when no route found", async () => {
-    global.fetch = (async () => {
-      return new Response(JSON.stringify({ routes: [] }));
-    }) as typeof fetch;
+    mockMcpResponse({ routes: [] });
 
     await expect(route(["A", "B"])).rejects.toThrow("EXIT:1");
   });
 
-  test("falls back to distanceMeters when localizedValues missing", async () => {
-    global.fetch = (async () => {
-      return new Response(JSON.stringify({
-        routes: [{
-          distanceMeters: 5000,
-          duration: "600s",
-          legs: [{ steps: [] }],
-        }],
-      }));
-    }) as typeof fetch;
+  test("formats small distances in meters", async () => {
+    mockMcpResponse({ routes: [{ distanceMeters: 500, duration: "300s" }] });
 
     await route(["A", "B"]);
 
     const output = JSON.parse(logs[0]);
-    expect(output.route.distance).toBe("5000 m");
-    expect(output.route.duration).toBe("600s");
+    expect(output.route.distance).toBe("500 m");
+    expect(output.route.duration).toBe("5 mins");
   });
 });

@@ -29,7 +29,7 @@ Authentication is handled automatically. The Google Maps API key is pre-configur
 
 ### places
 
-Search for places, businesses, addresses, and points of interest.
+Search for places, businesses, addresses, and points of interest. Returns place IDs, coordinates, Google Maps links, and a natural language summary.
 
 ```bash
 # Basic search
@@ -52,17 +52,11 @@ gmaps places "restaurants" --limit 5 --language en
 
 ### route
 
-Compute travel routes between locations.
+Compute travel distance and duration between locations. Supports drive and walk modes.
 
 ```bash
 # Basic route
 gmaps route "JFK Airport" "Manhattan"
-
-# With travel mode
-gmaps route "Sydney" "Melbourne" --mode drive
-
-# With intermediate stops
-gmaps route "Sydney" "Melbourne" --waypoints "Canberra,Albury"
 
 # Walking directions
 gmaps route "Central Park" "Brooklyn Bridge" --mode walk
@@ -70,9 +64,7 @@ gmaps route "Central Park" "Brooklyn Bridge" --mode walk
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--mode <mode>` | `drive`, `walk`, `bicycle`, `transit` | drive |
-| `--waypoints <stops>` | Comma-separated intermediate stops | — |
-| `--units <system>` | `metric` or `imperial` | metric |
+| `--mode <mode>` | `drive` or `walk` | drive |
 
 ## Output Format
 
@@ -84,16 +76,17 @@ Both commands output JSON to stdout.
 {
   "places": [
     {
-      "name": "Blue Bottle Coffee",
-      "address": "450 W 15th St, New York, NY 10011",
+      "id": "ChIJ...",
       "location": { "lat": 40.7423, "lng": -74.006 },
-      "rating": 4.5,
-      "types": ["coffee_shop", "cafe"],
-      "mapsUrl": "https://maps.google.com/?cid=..."
+      "mapsUrl": "https://maps.google.com/place/...",
+      "directionsUrl": "https://maps.google.com/dir/..."
     }
-  ]
+  ],
+  "summary": "A natural language summary of the results with place names and details."
 }
 ```
+
+The `summary` field contains the most useful information — it includes place names, descriptions, and context that the individual place entries don't have.
 
 ### route
 
@@ -102,24 +95,24 @@ Both commands output JSON to stdout.
   "route": {
     "distance": "15.2 km",
     "duration": "28 mins",
-    "steps": [
-      { "instruction": "Head north on Van Wyck Expy", "distance": "3.1 km", "duration": "5 mins" }
-    ]
+    "distanceMeters": 15200,
+    "durationSeconds": 1680
   }
 }
 ```
 
 ## Key Patterns
 
-- **Find a place:** `gmaps places "query"` — returns name, address, coordinates, rating
-- **Get directions:** `gmaps route "origin" "destination"` — returns distance, duration, turn-by-turn steps
+- **Find a place:** `gmaps places "query"` — the `summary` field has names and details
+- **Get distance/time:** `gmaps route "origin" "destination"` — returns distance and duration
 - **Nearby search:** `gmaps places "type" --near "lat,lng"` — find things near a coordinate
-- **Multi-stop route:** `gmaps route "A" "D" --waypoints "B,C"` — route through intermediate stops
+- **Walking vs driving:** `gmaps route "A" "B" --mode walk` — compare travel modes
 
 ## Notes
 
 - If `places` returns an empty array, try broadening the search or removing `--near`
 - If `route` fails, the origin/destination may be too vague — try adding city/country
+- Route only supports `drive` and `walk` modes (no bicycle or transit)
 
 ## Help
 
