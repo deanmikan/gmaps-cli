@@ -1,18 +1,25 @@
 {
   "name": "gmaps-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lightweight CLI for Google Maps Places and Routes APIs",
   "bin": {
     "gmaps": "./src/index.ts"
   },
   "type": "module",
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/deanmikan/gmaps-cli"
   },
-  "keywords": ["google-maps", "places", "routes", "cli"],
+  "keywords": [
+    "google-maps",
+    "places",
+    "routes",
+    "cli"
+  ],
   "engines": {
     "bun": ">=1.0.0"
   },
