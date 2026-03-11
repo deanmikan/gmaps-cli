@@ -49,6 +49,28 @@ export async function mcpCall<T>(toolName: string, args: Record<string, unknown>
   return JSON.parse(text) as T;
 }
 
+/** Call a Google Maps REST API endpoint directly */
+export async function restCall<T>(url: string, body: Record<string, unknown>, fieldMask: string): Promise<T> {
+  const apiKey = getApiKey();
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": apiKey,
+      "X-Goog-FieldMask": fieldMask,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    console.error(`API error (${res.status}): ${error}`);
+    process.exit(1);
+  }
+
+  return (await res.json()) as T;
+}
+
 /** Format seconds string (e.g. "1680s") to human-readable (e.g. "28 mins") */
 export function formatDuration(duration: string): string {
   const seconds = parseInt(duration);
