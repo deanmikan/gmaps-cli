@@ -3,6 +3,7 @@ import { mcpCall, parseArgs, formatDuration, formatDistance } from "../utils.js"
 const TRAVEL_MODES: Record<string, string> = {
   drive: "DRIVE",
   walk: "WALK",
+  transit: "TRANSIT",
 };
 
 interface Waypoint {
@@ -45,7 +46,7 @@ export async function route(argv: string[]) {
 Origin/destination can be an address, lat,lng coordinates, or a place ID (from gmaps places).
 
 Options:
-  --mode <mode>  Travel mode: drive, walk (default: drive)`);
+  --mode <mode>  Travel mode: drive, walk, transit (default: drive)`);
     process.exit(origin && destination ? 0 : 1);
   }
 
