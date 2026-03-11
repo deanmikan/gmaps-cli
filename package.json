@@ -1,6 +1,6 @@
 {
   "name": "gmaps-cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lightweight CLI for Google Maps Places and Routes APIs",
   "bin": {
     "gmaps": "./src/index.ts"
